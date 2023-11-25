@@ -1,4 +1,4 @@
-const { response } = require("../app");
+
 const knex = require("../db/connection");
 const addCritic = require("../utils/mapCritic");
 
