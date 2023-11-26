@@ -9,7 +9,13 @@ const theatersRouter = require("./theaters/theaters.router");
 const errorHandler = require("./errors/errorHandler");
 const notFound = require("./errors/notFound");
 
-app.use(cors());
+const corsOptions = {
+    origin: "https://welovemoviesfrontend-02uq.onrender.com",
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+    credentials: true,
+  };
+  
+  app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
