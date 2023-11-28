@@ -1,70 +1,59 @@
 const service = require("./reviews.service");
 const asyncErrorBoundary = require("../errors/asyncErrorBoundary");
 
+//middleware
+
 async function reviewExists(req, res, next) {
   const { reviewId } = req.params;
-  const review = await service.read(reviewId);
-  if (review) {
-    res.locals.review = review;
-    return next();
-  } else {
-    next({ status: 404, message: `Review cannot be found.` });
-  }
+  const match = await service.read(reviewId);
+  if (match.length === 0 || !reviewId)
+    return next({ status: 404, message: "Review cannot be found." });
+  res.locals.review = match[0];
+
+  next();
 }
 
-function hasContentAndScore(req, res, next) {
-  const { score, content } = req.body.data;
-  if (score && content) {
-    res.locals.data = {};
-    res.locals.data.score = score;
-    res.locals.data.content = content;
-    return next();
-  } else {
-    next({
-      status: 400,
-      message: `Request body must have a 'content' and 'score' property.`,
-    });
-  }
+
+function hasProperties(req, res, next) {
+  const { data: { score = null, content = null } = {} } = req.body;
+  let updateObj = {};
+  if (!score && !content)
+    return next({ status: 400, message: "Missing score or content in body" });
+  if (score) updateObj.score = score;
+  if (content) updateObj.content = content;
+  res.locals.update = updateObj;
+  next();
 }
 
-function scoreIsValid(req, res, next) {
-  const { score } = req.body.data;
-  if (typeof score === "number") {
-    res.locals.data.score = score;
-    return next();
-  } else {
-    next({
-      status: 400,
-      message: `Invalid input, 'score' property must be an integer. Received: ${score}`,
-    });
-  }
+//functions
+
+async function list(req, res) {
+  const reviews = await service.list();
+  res.status(200).json({ data: reviews });
 }
 
-async function update(req, res) {
-  const updatedReview = {
-    ...res.locals.review,
-    ...req.body.data,
-    review_id: res.locals.review.review_id,
-  };
-  const data = await service.update(updatedReview);
-  const review = await service.read(res.locals.review.review_id);
-  const critic = await service.getCritic(res.locals.review.critic_id);
-  res.status(200).json({ data: { ...review, critic: critic[0] } });
+function read(req, res) {
+  res.status(200).json({ data: res.locals.review });
+}
+
+async function put(req, res) {
+  const { critic_id, review_id } = res.locals.review;
+  const update = res.locals.update;
+  await service.update(update, review_id);
+  const updatedReview = await service.read(review_id);
+  const critic = await service.getCritic(critic_id);
+  res.status(200).json({ data: { ...updatedReview[0], critic: critic[0] } });
 }
 
 async function destroy(req, res) {
-  const { review: data } = res.locals;
-  const { review_id } = data;
-  await service.delete(review_id);
+  const { review_id } = res.locals.review;
+  await service.destroy(review_id);
   res.sendStatus(204);
 }
 
 module.exports = {
+  list: [asyncErrorBoundary(list)],
+  read: [asyncErrorBoundary(reviewExists), read],
+  put: [asyncErrorBoundary(reviewExists), hasProperties, asyncErrorBoundary(put)],
   delete: [asyncErrorBoundary(reviewExists), asyncErrorBoundary(destroy)],
-  update: [
-    asyncErrorBoundary(reviewExists),
-    asyncErrorBoundary(hasContentAndScore),
-    asyncErrorBoundary(scoreIsValid),
-    asyncErrorBoundary(update),
-  ],
 };
